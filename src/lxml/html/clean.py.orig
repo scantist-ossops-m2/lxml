@@ -545,9 +545,6 @@ class Cleaner(object):
         if _looks_like_tag_content(style):
             # e.g. '<math><style><img src=x onerror=alert(1)></style></math>'
             return True
-        if '</noscript' in style:
-            # e.g. '<noscript><style><a title="</noscript><img src=x onerror=alert(1)>">'
-            return True
         return False
 
     def clean_html(self, html):
