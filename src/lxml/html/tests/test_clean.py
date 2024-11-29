@@ -69,6 +69,51 @@ class CleanerTest(unittest.TestCase):
         s = lxml.html.fromstring('<invalid tag>child</another>')
         self.assertEqual('child', clean_html(s).text_content())
 
+    def test_sneaky_noscript_in_style(self):
+        # This gets parsed as <noscript> -> <style>"...</noscript>..."</style>
+        # thus passing the </noscript> through into the output.
+        html = '<noscript><style><a title="</noscript><img src=x onerror=alert(1)>">'
+        s = lxml.html.fragment_fromstring(html)
+
+        self.assertEqual(
+            b'<noscript><style>/* deleted */</style></noscript>',
+            lxml.html.tostring(clean_html(s)))
+
+    def test_sneaky_import_in_style(self):
+        # Prevent "@@importimport" -> "@import" replacement.
+        style_codes = [
+            "@@importimport(extstyle.css)",
+            "@ @  import import(extstyle.css)",
+            "@ @ importimport(extstyle.css)",
+            "@@  import import(extstyle.css)",
+            "@ @import import(extstyle.css)",
+            "@@importimport()",
+        ]
+        for style_code in style_codes:
+            html = '<style>%s</style>' % style_code
+            s = lxml.html.fragment_fromstring(html)
+
+            cleaned = lxml.html.tostring(clean_html(s))
+            self.assertEqual(
+                b'<style>/* deleted */</style>',
+                cleaned,
+                "%s  ->  %s" % (style_code, cleaned))
+
+    def test_formaction_attribute_in_button_input(self):
+        # The formaction attribute overrides the form's action and should be
+        # treated as a malicious link attribute
+        html = ('<form id="test"><input type="submit" formaction="javascript:alert(1)"></form>'
+        '<button form="test" formaction="javascript:alert(1)">X</button>')
+        expected = ('<div><form id="test"><input type="submit" formaction=""></form>'
+        '<button form="test" formaction="">X</button></div>')
+        cleaner = Cleaner(
+            forms=False,
+            safe_attrs_only=False,
+        )
+        self.assertEqual(
+            expected,
+            cleaner.clean_html(html))
+
 
 def test_suite():
     suite = unittest.TestSuite()
